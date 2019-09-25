@@ -15,6 +15,7 @@ namespace async3 {
     int Run() {
         cout << "Starting 2 operations asynchronously" << endl;
 
+        // MUST: pass by value / const ref no mutable
         future<void> f1 = async([] { DoSomething('.'); });
         future<void> f2 = async([] { DoSomething('+'); });
         // Another method:
