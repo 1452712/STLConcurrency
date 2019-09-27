@@ -30,6 +30,12 @@
     <ClInclude Include="sharedfuture1.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="condvar2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="atomics1.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -45,6 +51,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="sharedfuture1.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="condvar2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="atomics1.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

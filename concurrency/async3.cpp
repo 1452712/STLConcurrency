@@ -41,7 +41,6 @@ namespace async3 {
         }
         cout << "\nDone" << endl;
 
-        system("pause");
         return 0;
     }
 }

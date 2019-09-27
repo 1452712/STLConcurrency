@@ -31,7 +31,10 @@ namespace sharedfuture1 {
 
     int Run() {
         try {
+            // Can be passed by ref
             shared_future<int> f = async(QueryNumber);
+            // Another method:
+            //auto f_ = async(QueryNumber).share();
 
             future<void> f1 = async(launch::async, DoSomething, '.', f);
             future<void> f2 = async(launch::async, DoSomething, '+', f);
@@ -46,7 +49,6 @@ namespace sharedfuture1 {
         }
         cout << "\nDone" << endl;
 
-        system("pause");
         return 0;
     }
 }

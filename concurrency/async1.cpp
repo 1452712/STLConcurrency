@@ -58,8 +58,6 @@ namespace async1 {
             << " , using time: " << duration
             << " seconds" << std::endl;
 
-        system("pause");
-
         return 0;
     }
 }

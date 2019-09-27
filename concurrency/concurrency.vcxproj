@@ -154,6 +154,8 @@
   <ItemGroup>
     <ClInclude Include="async1.h" />
     <ClInclude Include="async3.h" />
+    <ClInclude Include="atomics1.h" />
+    <ClInclude Include="condvar2.h" />
     <ClInclude Include="sharedfuture1.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
@@ -161,7 +163,9 @@
   <ItemGroup>
     <ClCompile Include="async1.cpp" />
     <ClCompile Include="async3.cpp" />
+    <ClCompile Include="atomics1.cpp" />
     <ClCompile Include="concurrency.cpp" />
+    <ClCompile Include="condvar2.cpp" />
     <ClCompile Include="sharedfuture1.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
