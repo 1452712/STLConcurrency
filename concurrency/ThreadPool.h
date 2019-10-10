@@ -15,73 +15,109 @@
 
 //TODO: 错误处理
 
-// refer to https://github.com/vit-vit/CTPL/blob/master/ctpl_stl.h
-// refer to boost.thread_pool
+// Reference：
+// ctpl: https://github.com/vit-vit/CTPL/blob/master/ctpl_stl.h
+// boost: boost.thread_pool
 
 namespace Thread
 {
-    // Threadlocal
-    template <typename Task>
-    class TaskThread {
+    typedef struct TaskThread
+    {
+        std::unique_ptr<std::thread> mThread = nullptr;
+        std::atomic<size_t> mThreadID = 0;
+        std::atomic<size_t> mTaskNum = 0;
+    }TaskThread;
+
+    class Task
+    {
     public:
+        Task(TaskThread* owner) :
+            mThreadOwner(owner)
+        {
+            mThreadOwner->mTaskNum++;
+        }
 
-        std::thread mThread;
+        virtual ~Task()
+        {
+            mThreadOwner->mTaskNum--;
+        }
 
-        //TODO Constructor
+        virtual void Execute()
+        {
+            // For debugging
+            for (int i = 0; i < 100; i++)
+            {
+                cout << "Thread: " << this_thread::get_id() << endl;
+                this_thread::sleep_for(chrono::milliseconds(i));
+            }
+        };
 
-        ~TaskThread() noexcept
+    private:
+        TaskThread *mThreadOwner;
+    };
+
+    // Concurrency task queue.
+    class TaskQueue {
+    public:
+        TaskQueue() {}
+
+        ~TaskQueue() noexcept
         {
             Clear();
         }
 
-        void Push(Task const & value) noexcept
+        //void Push(const std::unique_ptr<Task> pTask) noexcept
+        void Push(Task* pTask) noexcept
         {
             //{
             //std::lock_guard<std::mutex> lg(mQueueMutex);
             std::unique_lock<std::mutex> ul(mQueueMutex);
-            mTaskQueue.push(val);
+            mTaskQueue.push(pTask);
             //}
             //mQueueCondVar.notify_one();
         }
 
-        bool Pop(Task & value) noexcept
+        // Execute & Remove from the queue
+        bool Pop() noexcept
         {
             std::unique_lock<std::mutex> ul(mQueueMutex);
             // keep waiting?
             //mQueueCondVar.wait(ul, [&ret] { return !mQueue.empty(); /*double check*/});
             if (mTaskQueue.empty())
                 return false;
-            value = mTaskQueue.front();
+            mTaskQueue.front()->Execute();
+            delete mTaskQueue.front();
             mTaskQueue.pop();
             return true;
         }
 
         void Clear() noexcept
         {
-            Task* task;
-            while (Pop(task))
-                delete task;
+            while (Pop())
+            {
+                continue;
+            }
         }
 
     private:
         //std::thread mThread;
-        std::queue<Task> mTaskQueue;
+        //std::queue<std::unique_ptr<Task>> mTaskQueue;
+        std::queue<Task*> mTaskQueue;
         std::mutex mQueueMutex;
         //std::condition_variable mQueueCondVar;
     };
 
-    template <typename Task>
     class ThreadPool {
     public:
         // TODO: copy & move constructor
         // TODO: override =
-        ThreadPool(size_t const numThreads = 0) noexcept :
+        ThreadPool(const size_t numThreads = 0) noexcept :
             mWaitingThreadCount(0),
             mFinished(false),
             mTerminated(false)
         {
             MAX_THREAD_NUM = std::thread::hardware_concurrency() * 2;
-            Initialize((numThreads != 0 && numThreads < MAX_THREAD_NUM) ? numThreads : MAX_THREAD_NUM);
+            Resize((numThreads != 0 && numThreads < MAX_THREAD_NUM) ? numThreads : MAX_THREAD_NUM);
         }
 
         ~ThreadPool() noexcept
@@ -94,82 +130,61 @@ namespace Thread
             return mThreads.size();
         }
 
-        void GetThread(size_t pos, TaskThread<Task> && ret)  noexcept
+        void GetThread(size_t pos, TaskThread* ret)  noexcept
         {
             if (pos < mThreads.size())
                 ret = mThreads[pos];
         }
 
-        //TODO
+        // Initialize a thread
         void SetThread(size_t pos)
         {
             std::shared_ptr<std::atomic<bool>> flag(mFlags[pos]);
-            auto pTaskThread(mThreads[pos]);
+
             auto f = [this, pos, flag]() {
                 std::atomic<bool>& _flag = *flag;
-                Task* task = nullptr;
-                bool isPop = pTaskThread.Pop(task);
+                bool isPop = mTaskQueue.Pop();
                 while (true)
                 {
-                    // In case the thread contains tasks
                     while (isPop)
                     {
-                        //Execution
-                        (*task)();
-                        delete task;
-
                         if (_flag)
                             return;
                         else
-                            isPop = pTaskThread.Pop(task);
+                            isPop = mTaskQueue.Pop();
                     }
 
                     std::unique_lock<std::mutex> ul(mThreadMutex);
                     ++mWaitingThreadCount;
-                    mThreadCondVar.wait(ul, [this, &task, &isPop, &_flag]() { isPop = pTaskThread.Pop(task); return isPop || mFinished || _flag; });
+                    mThreadCondVar.wait(ul, 
+                        [this, &isPop, &_flag]()
+                        { 
+                            isPop = mTaskQueue.Pop();
+                            return isPop || mFinished || _flag;
+                        });
                     --mWaitingThreadCount;
                     if (!isPop)
-                        return;  // if the queue is empty and this->isDone == true or *flag then return
+                        return;
                 }
+                
             };
-            (mThreads[i]->mThread).reset(new std::thread(f)); // compiler may not support std::make_unique()
+
+            if (mThreads[pos] != nullptr)
+                delete mThreads[pos];
+            mThreads[pos] = new TaskThread();
+            mThreads[pos]->mThread = std::make_unique<std::thread>(f);
         }
 
-        // TODO
         bool AppendThread()
         {
-            if (!mFinished && !mTerminated)
-                return false;
-            if (mThreads.size() >= MAX_THREAD_NUM)
-                return false;
-
-            mThreads.push_back(nullptr);
-            SetThread(mThreads.size() - 1);
-            mFlags.push_back(std::make_shared<std::atomic<bool>>(false));
-            return true;
+            return Resize(mThreads.size() + 1);
         }
 
-        //TODO
-        bool DetachThread()
+        bool Resize(const size_t numThreads)
         {
-            if (!mFinished && !mTerminated)
-                return false;
-            if (mThreads.size() <= 0)
+            if (numThreads > MAX_THREAD_NUM || numThreads <= 0)
                 return false;
 
-            {
-                std::unique_lock<std::mutex> ul(mThreadMutex);
-                *mFlags[mThreads.size() - 1] = true;  // this thread will finish
-                (mThreads[mThreads.size() - 1]->mThread).detach();
-                mThreadCondVar.notify_all();
-            }
-            mThreads.pop_back();
-            mFlags.pop_back();
-            return true;
-        }
-
-        void Initialize(const size_t numThreads)
-        {
             if (!mFinished && !mTerminated)
             {
                 size_t lastNumThreads = mThreads.size();
@@ -193,14 +208,16 @@ namespace Thread
                         for (size_t i = lastNumThreads - 1; i >= numThreads; --i)
                         {
                             *mFlags[i] = true;  // this thread will finish
-                            (mThreads[i]->mThread).detach();
+                            (mThreads[i]->mThread)->detach();
                         }
                         mThreadCondVar.notify_all();
                     }
                     mThreads.resize(numThreads);
                     mFlags.resize(numThreads);
                 }
+                return true;
             }
+            return false;
         }
 
         // TODO
@@ -215,6 +232,7 @@ namespace Thread
                 {
                     *mFlags[i] = true;
                 }
+                mTaskQueue.Clear();
             }
             else
             {
@@ -226,20 +244,39 @@ namespace Thread
             {
                 std::unique_lock<std::mutex> ul(mThreadMutex);
                 mThreadCondVar.notify_all();  // stop all waiting threads
-            }
-            for (size_t i = 0; i < mThreads.size(); ++i)
-            {
-                if ((mThreads[i]->mThread).joinable())
-                    (mThreads[i]->mThread).join();
+
+                for (size_t i = 0; i < mThreads.size(); ++i)
+                {
+                    // Wait until task is done
+                    if ((mThreads[i]->mThread)->joinable())
+                        (mThreads[i]->mThread)->join();
+                }
             }
 
+            mTaskQueue.Clear();
             mThreads.clear();
             mFlags.clear();
         }
 
+        void PushTask(size_t pos)
+        {
+            //mTaskQueue.Push(std::make_unique<Task>(mThreads[pos]));
+            Task* pTask = new Task(mThreads[pos]);
+            mTaskQueue.Push(pTask);
+            std::unique_lock<std::mutex> ul(mThreadMutex);
+            mThreadCondVar.notify_one();
+        }
+
+        // Execute & Remove a task
+        void PopTask()
+        {
+            mTaskQueue.Pop();
+        }
+
     private:
         size_t MAX_THREAD_NUM;
-        std::vector<std::unique_ptr<TaskThread<Task>>> mThreads;
+        std::vector<TaskThread*> mThreads;
+        TaskQueue mTaskQueue;
         std::mutex mThreadMutex;
         std::condition_variable mThreadCondVar;
         std::atomic<size_t> mWaitingThreadCount;
@@ -249,4 +286,10 @@ namespace Thread
         std::atomic<bool> mFinished;
         std::atomic<bool> mTerminated;
     };
+}
+
+namespace Thread
+{
+    // Sample run
+    int Run();
 }

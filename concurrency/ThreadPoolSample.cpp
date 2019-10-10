@@ -3,28 +3,23 @@
 
 namespace Thread
 {
-    class Executer
-    {
-        void operator()()
-        {
-            for (int i = 0; i < 100; i++)
-            {
-                cout << "Thread: " << this_thread::get_id() << endl;
-                this_thread::sleep_for(chrono::milliseconds(i));
-            }
-        }
-    };
-
     int Run()
     {
-        ThreadPool<Executer> pool(16);
+        int size = 16;
+        ThreadPool pool(size);
         
-        for (int i = 0; i < 10; i++)
-            pool.DetachThread();
+        for (int i = 0; i < 8; ++i)
+            for (int j = 0; j < size; ++j) 
+                pool.PushTask(j);
 
-        for (int i = 0; i < 20; i++)
-            pool.AppendThread();
+        size = 32;
+        pool.Resize(size);
+        for (int i = 0; i < 8; ++i)
+            for (int j = 0; j < size; ++j) 
+                pool.PushTask(j);
 
         pool.Terminate();
+        
+        return 0;
     }
 }
