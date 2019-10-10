@@ -5,16 +5,16 @@ namespace Thread
 {
     int Run()
     {
-        int size = 16;
+        int size = 4;
         ThreadPool pool(size);
         
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < 10; ++i)
             for (int j = 0; j < size; ++j) 
-                pool.PushTask(j);
+                pool.PushTask(j); // Start to run background
 
-        size = 32;
+        size = 8;
         pool.Resize(size);
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < 10; ++i)
             for (int j = 0; j < size; ++j) 
                 pool.PushTask(j);
 

@@ -6,13 +6,6 @@
 #include <atomic>
 #include <mutex>
 
-//pool的接口:
-//提供一下创建线程，挂起线程的接口
-//每个线程在pool里维护一个自己当前任务的数量
-//可以被manager调用
-//只要能跑，能启动，能挂起，就行了
-//不要返回值，线程间同步
-
 //TODO: 错误处理
 
 // Reference：
@@ -24,7 +17,6 @@ namespace Thread
     typedef struct TaskThread
     {
         std::unique_ptr<std::thread> mThread = nullptr;
-        std::atomic<size_t> mThreadID = 0;
         std::atomic<size_t> mTaskNum = 0;
     }TaskThread;
 
@@ -44,12 +36,9 @@ namespace Thread
 
         virtual void Execute()
         {
-            // For debugging
-            for (int i = 0; i < 100; i++)
-            {
-                cout << "Thread: " << this_thread::get_id() << endl;
-                this_thread::sleep_for(chrono::milliseconds(i));
-            }
+            cout << "Thread: " << this_thread::get_id() << 
+                " , Remained tasks: " << mThreadOwner->mTaskNum << endl;
+            this_thread::sleep_for(chrono::milliseconds(100));
         };
 
     private:
@@ -220,8 +209,8 @@ namespace Thread
             return false;
         }
 
-        // TODO
-        void Terminate(bool forceStop = false) {
+        void Terminate(bool forceStop = false)
+        {
             if (forceStop)
             {
                 if (mTerminated)
@@ -244,13 +233,13 @@ namespace Thread
             {
                 std::unique_lock<std::mutex> ul(mThreadMutex);
                 mThreadCondVar.notify_all();  // stop all waiting threads
+            }
 
-                for (size_t i = 0; i < mThreads.size(); ++i)
-                {
-                    // Wait until task is done
-                    if ((mThreads[i]->mThread)->joinable())
-                        (mThreads[i]->mThread)->join();
-                }
+            for (size_t i = 0; i < mThreads.size(); ++i)
+            {
+                // Wait until task is done
+                if ((mThreads[i]->mThread)->joinable())
+                    (mThreads[i]->mThread)->join();
             }
 
             mTaskQueue.Clear();
@@ -262,15 +251,12 @@ namespace Thread
         {
             //mTaskQueue.Push(std::make_unique<Task>(mThreads[pos]));
             Task* pTask = new Task(mThreads[pos]);
-            mTaskQueue.Push(pTask);
-            std::unique_lock<std::mutex> ul(mThreadMutex);
+            {
+                std::unique_lock<std::mutex> ul(mThreadMutex);
+                mTaskQueue.Push(pTask);
+            }
             mThreadCondVar.notify_one();
-        }
-
-        // Execute & Remove a task
-        void PopTask()
-        {
-            mTaskQueue.Pop();
+            return;
         }
 
     private:
