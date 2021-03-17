@@ -301,6 +301,105 @@ std::list<T> parallel_quick_sort<std::list<T> input)
 //     small_sort(first, last);
 // }
 
+// C++20 supports executing a future in a separate thread with coroutines
+// https://www.modernescpp.com/index.php/executing-a-future-in-a-separate-thread-with-coroutines
+// require: 
+// #include <coroutine>
+template<typename T>
+struct my_future {
+    struct promise_type;
+    using handle_type = std::coroutine_handle<promise_type>;
+    handle_type coro;
+
+    my_future(handle_type h) : coro(h) {}
+    ~my_future() {
+        if(coro) coro.destroy();
+    }
+
+    T get() {
+        std::cout <<"    my_future::get: "
+            << "std::this_thread::get_id(): "
+            << std::this_thread::get_id() << std::endl;
+        
+        // resumes coroutine on another thread
+        std::thread t([this] { coro.resume(); });
+        t.join();
+
+        // Finish resuming before return result.
+        // Thus, calling t.join() after return is undefined.
+        // e.g. using jthread without scope will return arbitrary value.
+        return coro.promise().result;
+    }
+
+    // alternative: specialize coroutine_traits
+    struct promise_type {
+        T result;
+
+        promise_type() {
+            std::cout << "        promise_type::promise_type: "
+                      << "std::this_thread::get_id(): "
+                      << std::this_thread::get_id() << std::endl;
+        }
+
+        ~promise_type() {
+            std::cout << "        promise_type::~promise_type: "
+                      << "std::this_thread::get_id(): "
+                      << std::this_thread::get_id() << std::endl;
+        }
+
+        auto get_return_object() {
+            return my_future{handle_type::from_promise(*this)};
+        }
+
+        // Tips:
+        // The promise needs a return_void member function if
+        //     the coroutine has no co_return statement.
+        //     the coroutine has a co_return statement without argument.
+        //     the coroutine has a co_return expression statement where expression has type void.
+        // The promise needs a return_value member function if 
+        //     it returns co_return expression statement where expression must not have the type void
+        void return_value(T v) {
+            std::cout << "        promise_type::return_value: "
+                      << "std::this_thread::get_id(): "
+                      << std::this_thread::get_id() << std::endl;
+            std::cout << v << std::endl;
+            result = v;
+        }
+
+        void return_void() {}
+
+        std::suspend_always initial_suspend() {
+            return {};
+        }
+
+        std::suspend_always final_suspend() noexcept {
+            std::cout << "        promise_type::final_suspend: "
+                      << "std::this_thread::get_id(): "
+                      << std::this_thread::get_id() << std::endl;
+            return {};
+        }
+
+        void unhandled_exception() {
+            std::exit(1);
+        }
+    };
+};
+my_future<int> test_create_future() {
+    co_return 2021;
+}
+int test() {
+    std::cout << std::endl;
+    std::cout << "test: "
+        << "std::this_thread::get_id()"
+        << std::this_thread::get_id() << std::endl;
+    
+    auto fut = test_create_future();
+    auto res = fut.get();
+
+    std::cout << "res: " << res << std::endl;
+    return 0;
+}
+
 // Listing 4.22 std::async to gather all results
 std::future<FinalResult> ProcessData(std::vector<MyData>& vec)
 {
